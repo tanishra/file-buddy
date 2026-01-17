@@ -130,7 +130,7 @@ Contributions welcome! Please:
 3. Add tests for new features
 4. Submit a pull request
 
-## Acknowledgments
+## Built With
 
 - [LiveKit](https://livekit.io/) - Real-time voice infrastructure
 - [OpenAI](https://platform.openai.com/) - Realtime API
