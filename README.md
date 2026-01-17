@@ -50,8 +50,7 @@ LIVEKIT_API_SECRET=your_livekit_api_secret
 ### Run
 
 ```bash
-# Start the server
-uv run python main.py dev
+uv run main.py console
 ```
 
 ## Usage Examples
