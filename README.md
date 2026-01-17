@@ -130,3 +130,9 @@ Contributions welcome! Please:
 2. Create a feature branch
 3. Add tests for new features
 4. Submit a pull request
+
+## Acknowledgments
+
+- [LiveKit](https://livekit.io/) - Real-time voice infrastructure
+- [OpenAI](https://platform.openai.com/) - Realtime API
+- [uv](https://github.com/astral-sh/uv) - Fast Python package manager
