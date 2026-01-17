@@ -27,7 +27,7 @@ Voice-controlled AI file manager powered by OpenAI Realtime API. Organize, searc
 ```bash
 # Clone repository
 git clone https://github.com/tanishra/file-buddy.git
-cd FileBuddy-ai
+cd file-buddy
 
 # Install dependencies with uv
 uv sync
@@ -106,30 +106,6 @@ FileBuddy/
 ├── data/
 │   ├── snapshots/         # Rollback data
 │   └── audit_logs/        # Operation logs
-```
-
-## Development
-
-### Install Development Dependencies
-
-```bash
-uv sync --dev
-```
-
-### Run Tests
-
-```bash
-uv run pytest tests/ -v
-```
-
-### Code Quality
-
-```bash
-# Format code
-uv run black .
-
-# Lint
-uv run ruff check .
 ```
 
 ## Logging
