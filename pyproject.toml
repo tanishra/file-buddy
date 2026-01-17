@@ -1,0 +1,59 @@
+[project]
+name = "file-buddy"
+version = "0.1.0"
+description = "Voice-controlled AI file manager powered by OpenAI Realtime API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Your Name", email = "your.email@example.com" }
+]
+keywords = ["ai", "voice", "file-manager", "livekit", "openai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "livekit-agents>=0.8.0",
+    "livekit-plugins-openai>=0.6.0",
+    "livekit-plugins-noise-cancellation>=0.6.0",
+    "python-dotenv>=1.0.0",
+    "aiofiles>=23.2.1",
+    "watchdog>=3.0.0",
+    "send2trash>=1.8.2",
+    "aiosqlite>=0.19.0",
+    "pydantic>=2.5.0",
+    "structlog>=23.2.0",
+    "python-magic>=0.4.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "pytest-mock>=3.12.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
