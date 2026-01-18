@@ -13,6 +13,8 @@ class FileInfo:
     category: str
     is_sensitive: bool
     modified_at: float
+    is_folder: bool = False     
+    item_count: int = 0  
     
     @property
     def size_mb(self) -> float:
@@ -77,57 +79,110 @@ def categorize_file(file_path: Path) -> str:
 
 def scan_folder(folder: Path, recursive: bool = False) -> List[FileInfo]:
     """
-    Advanced folder scanning with deep recursive capabilities and comprehensive file analysis
+    Advanced folder scanning - detects BOTH files AND folders/subfolders
     
     Features:
-    - Recursive subdirectory scanning
-    - Automatic hidden file detection
+    - Scans files AND folders at current level
+    - Recursive subdirectory scanning (when enabled)
+    - Automatic hidden file/folder detection
     - Symlink handling
     - Permission error handling
     - Intelligent categorization
-    - File metadata extraction
+    - Folder size calculation
     
     Args:
         folder: Folder to scan
-        recursive: Scan all subdirectories recursively (unlimited depth)
+        recursive: Scan all subdirectories recursively
         
     Returns:
-        List of FileInfo objects with complete file metadata
+        List of FileInfo objects (both files and folders)
     """
-    files = []
+    items = []  # Will contain both files and folders
     
-    def _scan_recursive(current_path: Path):
-        """Internal recursive scanner with error handling"""
+    def _calculate_folder_size(folder_path: Path) -> tuple[int, int]:
+        """Calculate total size and item count of a folder"""
+        total_size = 0
+        item_count = 0
+        
         try:
-            items = list(current_path.iterdir())
+            for item in folder_path.iterdir():
+                item_count += 1
+                try:
+                    if item.is_file():
+                        total_size += item.stat().st_size
+                    elif item.is_dir():
+                        # Recursively calculate subfolder size
+                        subfolder_size, _ = _calculate_folder_size(item)
+                        total_size += subfolder_size
+                except (OSError, PermissionError):
+                    continue
+        except (OSError, PermissionError):
+            pass
+        
+        return total_size, item_count
+    
+    def _scan_recursive(current_path: Path, collect_folders: bool = True):
+        """Internal recursive scanner with folder detection"""
+        try:
+            dir_items = list(current_path.iterdir())
         except (OSError, PermissionError):
             # Skip folders we can't access
             return
         
-        for item in items:
+        for item in dir_items:
             try:
                 # Skip hidden files and folders (starting with .)
                 if item.name.startswith('.'):
                     continue
                 
-                # Handle directories
+                # Handle FOLDERS/DIRECTORIES
                 if item.is_dir():
+                    # Add folder to results (NEW BEHAVIOR)
+                    if collect_folders:
+                        try:
+                            stat = item.stat()
+                            folder_size, folder_items = _calculate_folder_size(item)
+                            
+                            items.append(FileInfo(
+                                path=item,
+                                size_bytes=folder_size,
+                                category="Folder",  # Special category for folders
+                                is_sensitive=False,
+                                modified_at=stat.st_mtime,
+                                is_folder=True,
+                                item_count=folder_items
+                            ))
+                        except (OSError, PermissionError):
+                            # If we can't read folder, still add it with 0 size
+                            items.append(FileInfo(
+                                path=item,
+                                size_bytes=0,
+                                category="Folder",
+                                is_sensitive=False,
+                                modified_at=0,
+                                is_folder=True,
+                                item_count=0
+                            ))
+                    
+                    # Recurse into subdirectories
                     if recursive:
-                        # Recurse into subdirectories
-                        _scan_recursive(item)
+                        _scan_recursive(item, collect_folders=True)
+                    
                     continue
                 
-                # Handle files (including symlinks to files)
+                # Handle FILES (including symlinks to files)
                 if item.is_file() or item.is_symlink():
                     try:
                         stat = item.stat()
                         
-                        files.append(FileInfo(
+                        items.append(FileInfo(
                             path=item,
                             size_bytes=stat.st_size,
                             category=categorize_file(item),
                             is_sensitive=is_sensitive_file(item),
-                            modified_at=stat.st_mtime
+                            modified_at=stat.st_mtime,
+                            is_folder=False,
+                            item_count=0
                         ))
                     except (OSError, PermissionError):
                         # Skip files we can't read
@@ -138,9 +193,9 @@ def scan_folder(folder: Path, recursive: bool = False) -> List[FileInfo]:
                 continue
     
     # Start scanning from root folder
-    _scan_recursive(folder)
+    _scan_recursive(folder, collect_folders=True)
     
-    return files
+    return items
 
 def group_by_category(files: List[FileInfo]) -> Dict[str, List[FileInfo]]:
     """
