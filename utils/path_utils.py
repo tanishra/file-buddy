@@ -55,12 +55,15 @@ def expand_user_path(path: str) -> Path:
     """
     path = path.strip()
 
-    lower = path.lower()
+    # Strip leading slash ONLY for alias matching
+    stripped = path.lstrip("/")
+
+    lower = stripped.lower()
 
     # Handle implicit home aliases
     for alias, folder in HOME_ALIASES.items():
         if lower == alias or lower.startswith(alias + "/"):
-            remainder = path[len(alias):].lstrip("/")
+            remainder = stripped[len(alias):].lstrip("/")
 
             resolved = Path.home() / folder
             if remainder:
