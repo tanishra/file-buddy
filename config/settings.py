@@ -1,5 +1,8 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(".env.local")
 
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -43,5 +46,14 @@ LOG_FORMAT = os.getenv("LOG_FORMAT", "json")  # json or console
 SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 AUDIT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-#OpenAI Model
-model="gpt-4o-mini"
+class Settings:
+    # OpenAI
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    # Deepgram
+    DEEPGRAM_STT: str = os.getenv("DEEPGRAM_STT", "flux-general-en")
+    DEEPGRAM_TTS: str = os.getenv("DEEPGRAM_TTS", "aura-2-thalia-en")
+
+
+# Singleton-style access
+settings = Settings()
