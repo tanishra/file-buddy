@@ -42,3 +42,6 @@ LOG_FORMAT = os.getenv("LOG_FORMAT", "json")  # json or console
 # Ensure directories exist
 SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 AUDIT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+#OpenAI Model
+model="gpt-4o-mini"
