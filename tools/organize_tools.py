@@ -48,7 +48,7 @@ async def organize_folder_tool(
             return ToolResult(success=False, error=f"Unknown strategy: {strategy}",confirmation_message=(
                 f"Organize {len(files)} files into {len(groups)} folders "
                 f"using strategy '{strategy}'?"
-            ))
+            )).to_dict()
 
         # Confirmation required
         return ToolResult(
