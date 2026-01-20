@@ -1,6 +1,3 @@
-"""
-Context Manager - Tracks conversation state and resolves references
-"""
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
