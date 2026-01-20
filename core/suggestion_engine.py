@@ -1,6 +1,3 @@
-"""
-Suggestion Engine - Provides intelligent recommendations based on user behavior
-"""
 from typing import List, Dict, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
