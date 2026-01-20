@@ -12,7 +12,7 @@ from livekit.agents import (
     AudioConfig, 
     BuiltinAudioClip,
 )
-from livekit.plugins import openai, noise_cancellation, deepgram
+from livekit.plugins import openai, noise_cancellation, deepgram, silero
 
 # Core components
 from core.confirmation import ConfirmationManager
@@ -141,6 +141,7 @@ class FileBuddy(Agent):
             stt=deepgram.STT(model=Settings.DEEPGRAM_STT),
             llm=openai.LLM(model=Settings.OPENAI_MODEL),
             tts=deepgram.TTS(model=Settings.DEEPGRAM_TTS),
+            vad=silero.VAD.load(),
             chat_ctx=chat_ctx,
         )
 
