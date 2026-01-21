@@ -1,25 +1,26 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 from typing import Optional
-from pydantic_settings import BaseSettings
-from pydantic import Field
 
-# Load environment variables from .env.local
-load_dotenv(".env.local")
+from dotenv import load_dotenv
+from pydantic import Field, ConfigDict
+from pydantic_settings import BaseSettings
+
+# Load environment variables only in development
+if os.getenv("ENVIRONMENT", "development") == "development":
+    load_dotenv(".env.local")
+
 
 class Settings(BaseSettings):
     """Application settings with validation and environment support"""
 
     # Project Directories
-    PROJECT_ROOT: Path = Path(__file__).parent.parent
+    PROJECT_ROOT: Path = Path(
+        os.getenv("PROJECT_ROOT", Path(__file__).resolve().parent.parent)
+    )
     DATA_DIR: Path = PROJECT_ROOT / "data"
     SNAPSHOTS_DIR: Path = DATA_DIR / "snapshots"
     AUDIT_LOGS_DIR: Path = DATA_DIR / "audit_logs"
-    
-    # Ensure directories exist
-    SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    AUDIT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Database
     DATABASE_PATH: Path = DATA_DIR / "memory.db"
@@ -35,24 +36,30 @@ class Settings(BaseSettings):
     REQUIRE_CONFIRMATION_FILE_COUNT: int = Field(default=10, description="Always confirm if > 10 files")
 
     # File Type Categories
-    FILE_TYPE_CATEGORIES: dict = Field(default={
-        "Documents": [".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".pages", ".md"],
-        "Spreadsheets": [".xls", ".xlsx", ".csv", ".numbers", ".ods"],
-        "Presentations": [".ppt", ".pptx", ".key", ".odp"],
-        "Images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".heic", ".ico"],
-        "Videos": [".mp4", ".mov", ".avi", ".mkv", ".wmv", ".flv", ".webm", ".m4v"],
-        "Audio": [".mp3", ".wav", ".aac", ".flac", ".m4a", ".ogg", ".wma"],
-        "Archives": [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"],
-        "Code": [".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".java", ".cpp", ".c", ".go", ".rs", ".rb", ".php", ".md"],
-        "Executables": [".exe", ".dmg", ".app", ".deb", ".rpm", ".msi"],
-        "Data": [".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".sql"],
-        "Other": []
-    })
+    FILE_TYPE_CATEGORIES: dict = Field(
+        default_factory=lambda: {
+            "Documents": [".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".pages", ".md"],
+            "Spreadsheets": [".xls", ".xlsx", ".csv", ".numbers", ".ods"],
+            "Presentations": [".ppt", ".pptx", ".key", ".odp"],
+            "Images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".heic", ".ico"],
+            "Videos": [".mp4", ".mov", ".avi", ".mkv", ".wmv", ".flv", ".webm", ".m4v"],
+            "Audio": [".mp3", ".wav", ".aac", ".flac", ".m4a", ".ogg", ".wma"],
+            "Archives": [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"],
+            "Code": [
+                ".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css",
+                ".java", ".cpp", ".c", ".go", ".rs", ".rb", ".php", ".md"
+            ],
+            "Executables": [".exe", ".dmg", ".app", ".deb", ".rpm", ".msi"],
+            "Data": [".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".sql"],
+            "Other": [],
+        }
+    )
 
     # API Keys
     OPENAI_API_KEY: str = Field(..., description="OpenAI API key")
     DEEPGRAM_API_KEY: str = Field(..., description="Deepgram API key")
     LIVEKIT_URL: str = Field(..., description="LiveKit server URL")
+    NEXT_PUBLIC_LIVEKIT_URL: str = Field(..., description="Public LiveKit WebSocket URL (used by frontend / public clients)")
     LIVEKIT_API_KEY: str = Field(..., description="LiveKit API key")
     LIVEKIT_API_SECRET: str = Field(..., description="LiveKit API secret")
     MEM0_API_KEY: Optional[str] = Field(None, description="Mem0 API key")
@@ -102,32 +109,40 @@ class Settings(BaseSettings):
     API_TIMEOUT: int = Field(default=30, description="API request timeout")
     FILE_OPERATION_TIMEOUT: int = Field(default=300, description="File operation timeout")
 
-    # Logging settings from environment
-    LOG_LEVEL_ENV: str = os.getenv("LOG_LEVEL", "INFO")
-    LOG_FORMAT_ENV: str = os.getenv("LOG_FORMAT", "json")  # json or console
+    # Pydantic v2 Configuration
+    model_config = ConfigDict(
+        env_file=".env.local",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="forbid",
+    )
 
-    class Config:
-        env_file = ".env.local"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
 
 # Singleton-style access
 settings = Settings()
 
+
+def ensure_directories() -> None:
+    """Ensure required directories exist (call explicitly at app startup)."""
+    settings.SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    settings.AUDIT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
 def is_production() -> bool:
-    """Check if running in production environment"""
+    """Check if running in production environment."""
     return settings.ENVIRONMENT == "production"
 
 
 def is_development() -> bool:
-    """Check if running in development environment"""
+    """Check if running in development environment."""
     return settings.ENVIRONMENT == "development"
 
 
 def get_log_level() -> str:
-    """Get appropriate log level based on environment"""
+    """Get appropriate log level based on environment."""
     if is_production():
         return "WARNING"
-    elif settings.DEBUG:
+    if settings.DEBUG:
         return "DEBUG"
     return settings.LOG_LEVEL
