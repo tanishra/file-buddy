@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 from datetime import datetime
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 import structlog
-from config.settings import settings, LOG_LEVEL, LOG_FORMAT, get_log_level
+from config.settings import settings, get_log_level
 
 
 class JSONFormatter(logging.Formatter):
@@ -316,7 +316,7 @@ def setup_logging():
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer() if LOG_FORMAT == "json"
+            structlog.processors.JSONRenderer() if settings.LOG_FORMAT == "json"
             else structlog.dev.ConsoleRenderer(colors=True),
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
@@ -329,7 +329,7 @@ def setup_logging():
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
-        level=getattr(logging, LOG_LEVEL.upper()),
+        level=getattr(logging, get_log_level().upper()),
     )
 
 
