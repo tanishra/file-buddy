@@ -3,6 +3,7 @@ import logging
 from typing import Optional, List, Dict
 from livekit.agents import ChatContext
 from mem0 import AsyncMemoryClient
+from config.prompts import MEM0_PROMPT
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,27 +26,7 @@ class MemoryManager:
         """Configure what Mem0 should store and ignore."""
         
         try:
-            custom_instructions = """
-            Only store IMPORTANT user preferences and facts for a file organization assistant.
-
-            STORE:
-                - User preferences (organization style, folder structure preferences)
-                - Important personal details shared intentionally
-                - Explicit requests to remember something ("remember that...", "note that...")
-                - Project-related decisions and requirements
-                - File naming conventions or rules the user wants to follow
-                - Workflow preferences and habits
-
-            IGNORE:
-                - Casual greetings ("hello", "hi", "hey", "thanks")
-                - Small talk and filler words
-                - Temporary questions or one-time commands
-                - Repetitive or redundant information
-                - Vague or uncertain statements ("maybe", "I think", "perhaps")
-                - Simple acknowledgments ("ok", "sure", "got it")
-
-            Only extract memories with HIGH confidence and specific, actionable details.
-                """
+            custom_instructions = MEM0_PROMPT
             self.mem0.project.update(custom_instructions=custom_instructions)
             logger.info("Custom instructions configured for Mem0 project")
         except Exception as e:
