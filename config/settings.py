@@ -97,6 +97,30 @@ class Settings(BaseSettings):
     ENABLE_UNDO: bool = Field(default=True, description="Enable undo functionality")
     MAX_UNDO_HISTORY: int = Field(default=50, description="Maximum undo history entries")
 
+    # Security Settings 
+    ENABLE_SECURITY_VALIDATION: bool = Field(default=True, description="Enable path security validation")
+    ENABLE_RISK_ASSESSMENT: bool = Field(default=True, description="Enable operation risk assessment")
+    REQUIRE_CONFIRMATION_HIGH_RISK: bool = Field(default=True, description="Require confirmation for high-risk ops")
+    
+    # Backup Settings 
+    ENABLE_AUTO_BACKUP: bool = Field(default=True, description="Auto-backup before destructive operations")
+    BACKUP_RETENTION_DAYS: int = Field(default=30, description="Backup retention period")
+    MAX_BACKUP_SIZE_GB: int = Field(default=5, description="Maximum backup storage size in GB")
+    
+    # Audit Settings 
+    ENABLE_AUDIT_LOG: bool = Field(default=True, description="Enable audit logging")
+    AUDIT_RETENTION_DAYS: int = Field(default=90, description="Audit log retention period")
+    AUDIT_INCLUDE_READ_OPS: bool = Field(default=False, description="Log read-only operations")
+    
+    # Security Limits 
+    MAX_PATH_DEPTH: int = Field(default=10, description="Maximum directory recursion depth")
+    MAX_BATCH_TOTAL_SIZE_MB: int = Field(default=1024, description="Maximum total size for batch operations")
+    
+    # Confirmation Settings 
+    CONFIRMATION_TIMEOUT: int = Field(default=300, description="Confirmation timeout in seconds")
+    REQUIRE_PIN_FOR_CRITICAL: bool = Field(default=False, description="Require PIN for critical operations")
+    CRITICAL_OPERATION_PIN: Optional[str] = Field(None, description="PIN for critical operations")
+
     # Logging
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
     LOG_FORMAT: str = Field(default="json", description="Log format (json/text)")
@@ -138,6 +162,19 @@ def is_development() -> bool:
     """Check if running in development environment."""
     return settings.ENVIRONMENT == "development"
 
+def is_security_enabled() -> bool:
+    """Check if security features are enabled"""
+    return settings.ENABLE_SECURITY_VALIDATION
+
+
+def is_audit_enabled() -> bool:
+    """Check if audit logging is enabled"""
+    return settings.ENABLE_AUDIT_LOG
+
+
+def is_backup_enabled() -> bool:
+    """Check if auto-backup is enabled"""
+    return settings.ENABLE_AUTO_BACKUP
 
 def get_log_level() -> str:
     """Get appropriate log level based on environment."""
