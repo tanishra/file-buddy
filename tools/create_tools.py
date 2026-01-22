@@ -1,14 +1,21 @@
 import shutil
 from pathlib import Path
 from typing import List, Dict, Optional
+from typing_extensions import TypedDict
 
 from livekit.agents import function_tool, RunContext
 
 from utils.logger import get_logger
 from utils.path_utils import expand_user_path, validate_path
 from core.snapshot import SnapshotManager
-from core.audit import AuditLogger
+from core.audit_logger import AuditLogger
 from models.tool_results import ToolResult
+
+# Week 2 Security Imports
+from core.security import path_validator
+from core.risk_assessment import risk_assessor
+from core.confirmation import ConfirmationManager
+from core.exceptions import PathSecurityError, ValidationError
 
 logger = get_logger(__name__)
 
@@ -30,8 +37,32 @@ async def create_file_tool(
     file_type: str = "text",
 ) -> dict:
     """Create a new file"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         file_path = expand_user_path(path)
+        
+        # Week 2: Security validation
+        try:
+            validated_path = path_validator.validate_path(
+                file_path,
+                operation="write",
+                must_exist=False
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="create_file",
+                status="blocked",
+                details={"path": str(file_path), "error": str(e)},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(file_path)],
+                error=str(e)
+            )
+            logger.warning("Security violation", extra={"path": str(file_path), "error": str(e)})
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+        
         validate_path(file_path.parent, must_exist=True)
 
         template = FILE_TEMPLATES.get(file_type, FILE_TEMPLATES["text"])
@@ -39,14 +70,18 @@ async def create_file_tool(
 
         file_path.write_text(full_content, encoding="utf-8")
 
+        # Week 2: Enhanced audit logging
         audit = AuditLogger()
         await audit.log_operation(
             operation_type="create_file",
             status="success",
-            details={"path": str(file_path), "size": len(full_content)},
+            details={"path": str(file_path), "size": len(full_content), "file_type": file_type},
+            user_id=user_id,
+            risk_level="low",
+            paths=[str(validated_path)]
         )
 
-        logger.info("file_created", path=str(file_path), type=file_type)
+        logger.info("file_created", extra={"path": str(file_path), "type": file_type})
 
         return ToolResult(
             success=True,
@@ -55,7 +90,17 @@ async def create_file_tool(
         ).to_dict()
 
     except Exception as e:
-        logger.error("file_creation_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="create_file",
+            status="failed",
+            details={"path": str(path)},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("file_creation_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
@@ -65,20 +110,47 @@ async def create_folder_tool(
     path: str,
 ) -> dict:
     """Create a new folder"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         folder_path = expand_user_path(path)
+        
+        # Week 2: Security validation
+        try:
+            validated_path = path_validator.validate_path(
+                folder_path,
+                operation="write",
+                must_exist=False
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="create_folder",
+                status="blocked",
+                details={"path": str(folder_path)},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(folder_path)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+        
         validate_path(folder_path.parent, must_exist=True)
 
         folder_path.mkdir(parents=True, exist_ok=True)
 
+        # Week 2: Enhanced audit logging
         audit = AuditLogger()
         await audit.log_operation(
             operation_type="create_folder",
             status="success",
             details={"path": str(folder_path)},
+            user_id=user_id,
+            risk_level="low",
+            paths=[str(validated_path)]
         )
 
-        logger.info("folder_created", path=str(folder_path))
+        logger.info("folder_created", extra={"path": str(folder_path)})
 
         return ToolResult(
             success=True,
@@ -87,11 +159,21 @@ async def create_folder_tool(
         ).to_dict()
 
     except Exception as e:
-        logger.error("folder_creation_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="create_folder",
+            status="failed",
+            details={"path": str(path)},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("folder_creation_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
+
 # Canonical extension → template map
-# This MERGES conceptually with FILE_TEMPLATES without modifying it
 UNIVERSAL_EXTENSION_TEMPLATES: Dict[str, str] = {
     # Programming languages
     "py": FILE_TEMPLATES["python"],
@@ -144,9 +226,8 @@ UNIVERSAL_EXTENSION_TEMPLATES: Dict[str, str] = {
     "makefile": "",
     "gradle": "",
     "bat": "",
-
-    # Catch-all handled dynamically
 }
+
 
 def _resolve_template_for_file(filename: str) -> str:
     """Return best template for any filename"""
@@ -164,11 +245,11 @@ def _resolve_template_for_file(filename: str) -> str:
 
     return ""
 
-from typing import List, Optional
-from typing_extensions import TypedDict
+
 class FileSpec(TypedDict):
     name: str
     content: Optional[str]
+
 
 @function_tool()
 async def create_any_files_tool(
@@ -176,16 +257,32 @@ async def create_any_files_tool(
     base_path: str,
     files: List[FileSpec],
 ) -> dict:
-    """
-    Create ANY files of ANY type.
-    Each file entry:
-    {
-        "name": "path/relative/file.ext",
-        "content": "optional content"
-    }
-    """
+    """Create ANY files of ANY type"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         base_dir = expand_user_path(base_path)
+        
+        # Week 2: Security validation
+        try:
+            validated_base = path_validator.validate_path(
+                base_dir,
+                operation="write",
+                must_exist=False
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="create_any_files",
+                status="blocked",
+                details={"base_path": str(base_dir), "file_count": len(files)},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(base_dir)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+        
         validate_path(base_dir, must_exist=True)
         base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -196,6 +293,18 @@ async def create_any_files_tool(
             content = f.get("content", "")
 
             target = base_dir / name
+            
+            # Validate each file path
+            try:
+                validated_file = path_validator.validate_path(
+                    target,
+                    operation="write",
+                    must_exist=False
+                )
+            except (PathSecurityError, ValidationError) as e:
+                logger.warning(f"Skipping file due to security: {target} - {e}")
+                continue
+            
             target.parent.mkdir(parents=True, exist_ok=True)
 
             template = _resolve_template_for_file(target.name)
@@ -203,14 +312,18 @@ async def create_any_files_tool(
 
             created_files.append(str(target))
 
+        # Week 2: Enhanced audit logging
         audit = AuditLogger()
         await audit.log_operation(
             operation_type="create_any_files",
             status="success",
             details={"count": len(created_files), "files": created_files},
+            user_id=user_id,
+            risk_level="low",
+            paths=created_files
         )
 
-        logger.info("any_files_created", count=len(created_files))
+        logger.info("any_files_created", extra={"count": len(created_files)})
 
         return ToolResult(
             success=True,
@@ -219,9 +332,19 @@ async def create_any_files_tool(
         ).to_dict()
 
     except Exception as e:
-        logger.error("any_file_creation_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="create_any_files",
+            status="failed",
+            details={"base_path": str(base_path)},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(base_path)],
+            error=str(e)
+        )
+        logger.error("any_file_creation_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
-    
+
 
 PROJECT_TEMPLATES: Dict[str, List[str]] = {
     # GenAI / LLM Project (Production)
@@ -360,19 +483,32 @@ async def create_project_structure_tool(
     path: str,
     project_type: str,
 ) -> dict:
-    """
-    Create an industry-grade project structure.
-
-    Supported project_type:
-    - genai
-    - deep_learning
-    - react
-    - nextjs
-    - backend_api
-    - research
-    """
+    """Create an industry-grade project structure"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         root = expand_user_path(path)
+        
+        # Week 2: Security validation
+        try:
+            validated_root = path_validator.validate_path(
+                root,
+                operation="write",
+                must_exist=False
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="create_project_structure",
+                status="blocked",
+                details={"path": str(root), "project_type": project_type},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(root)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+        
         validate_path(root.parent, must_exist=True)
         root.mkdir(parents=True, exist_ok=True)
 
@@ -384,6 +520,7 @@ async def create_project_structure_tool(
 
         created_items = _create_structure(root, PROJECT_TEMPLATES[project_type])
 
+        # Week 2: Enhanced audit logging
         audit = AuditLogger()
         await audit.log_operation(
             operation_type="create_project_structure",
@@ -393,13 +530,18 @@ async def create_project_structure_tool(
                 "path": str(root),
                 "items_created": len(created_items),
             },
+            user_id=user_id,
+            risk_level="low",
+            paths=[str(root)]
         )
 
         logger.info(
             "project_structure_created",
-            type=project_type,
-            path=str(root),
-            count=len(created_items),
+            extra={
+                "type": project_type,
+                "path": str(root),
+                "count": len(created_items)
+            }
         )
 
         return ToolResult(
@@ -413,5 +555,15 @@ async def create_project_structure_tool(
         ).to_dict()
 
     except Exception as e:
-        logger.error("project_structure_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="create_project_structure",
+            status="failed",
+            details={"path": str(path), "project_type": project_type},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("project_structure_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
