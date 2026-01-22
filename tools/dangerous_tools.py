@@ -6,7 +6,7 @@ from livekit.agents import function_tool, RunContext
 
 from utils.logger import get_logger
 from utils.path_utils import expand_user_path, validate_path
-from core.audit import AuditLogger
+from core.audit_logger import AuditLogger
 from core.safety import SafetyChecker
 from models.tool_results import ToolResult
 
