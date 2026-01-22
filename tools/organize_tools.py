@@ -11,6 +11,13 @@ from core.snapshot import SnapshotManager
 from core.audit_logger import AuditLogger
 from models.tool_results import ToolResult
 
+# Week 2 Security Imports
+from core.security import path_validator, security_enforcer
+from core.risk_assessment import risk_assessor
+from core.confirmation import ConfirmationManager
+from core.backup_manager import backup_manager
+from core.exceptions import PathSecurityError, ValidationError
+
 logger = get_logger(__name__)
 
 
@@ -21,12 +28,35 @@ async def organize_folder_tool(
     strategy: str = "by_file_type",
 ) -> dict:
     """Organize folder by strategy"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         folder = expand_user_path(path)
-        validate_path(folder, must_exist=True)
+
+        # Week 2: Security validation
+        try:
+            validated_folder = path_validator.validate_path(
+                folder,
+                operation="modify",
+                must_exist=True
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="organize_folder",
+                status="blocked",
+                details={"path": str(folder), "strategy": strategy},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(folder)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+
+        validate_path(validated_folder, must_exist=True)
 
         # Scan folder
-        files = scan_folder(folder, recursive=False)
+        files = scan_folder(validated_folder, recursive=False)
 
         if not files:
             return ToolResult(success=True, message="Folder is empty")
@@ -45,12 +75,36 @@ async def organize_folder_tool(
                     groups[month_key] = []
                 groups[month_key].append(f)
         else:
-            return ToolResult(success=False, error=f"Unknown strategy: {strategy}",confirmation_message=(
-                f"Organize {len(files)} files into {len(groups)} folders "
-                f"using strategy '{strategy}'?"
-            )).to_dict()
+            return ToolResult(success=False, error=f"Unknown strategy: {strategy}")
 
-        # Confirmation required
+        # Week 2: Risk assessment & confirmation
+        cm = ConfirmationManager()
+        requires_conf, op_id, risk = await cm.request_confirmation(
+            operation="organize_folder",
+            paths=[str(validated_folder)],
+            user_id=user_id,
+            file_count=len(files),
+            folder_count=len(groups),
+            strategy=strategy
+        )
+        
+        if requires_conf and op_id:
+            message = cm.get_confirmation_message(op_id)
+            return ToolResult(
+                success=True,
+                requires_confirmation=True,
+                confirmation_message=message,
+                data={
+                    "path": str(validated_folder),
+                    "strategy": strategy,
+                    "file_count": len(files),
+                    "folder_count": len(groups),
+                    "groups": {k: len(v) for k, v in groups.items()},
+                    "operation_id": op_id
+                },
+            ).to_dict()
+
+        # Legacy confirmation fallback
         return ToolResult(
             success=True,
             requires_confirmation=True,
@@ -59,7 +113,7 @@ async def organize_folder_tool(
                 f"using strategy '{strategy}'?"
             ),
             data={
-                "path": str(folder),
+                "path": str(validated_folder),
                 "strategy": strategy,
                 "file_count": len(files),
                 "folder_count": len(groups),
@@ -68,7 +122,17 @@ async def organize_folder_tool(
         ).to_dict()
 
     except Exception as e:
-        logger.error("organize_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="organize_folder",
+            status="failed",
+            details={"path": str(path), "strategy": strategy},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("organize_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
@@ -79,9 +143,32 @@ async def execute_organize(
     strategy: str,
 ) -> dict:
     """Execute organization (after confirmation)"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         folder = expand_user_path(path)
-        files = scan_folder(folder, recursive=False)
+
+        # Week 2: Security validation
+        try:
+            validated_folder = path_validator.validate_path(
+                folder,
+                operation="modify",
+                must_exist=True
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="execute_organize",
+                status="blocked",
+                details={"path": str(folder), "strategy": strategy},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(folder)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+
+        files = scan_folder(validated_folder, recursive=False)
 
         # Group files
         if strategy == "by_file_type":
@@ -96,6 +183,8 @@ async def execute_organize(
                 if month_key not in groups:
                     groups[month_key] = []
                 groups[month_key].append(f)
+        else:
+            groups = {}
 
         # Create snapshot
         snapshot_mgr = SnapshotManager()
@@ -105,7 +194,7 @@ async def execute_organize(
         # Move files
         moved = 0
         for group_name, group_files in groups.items():
-            group_folder = folder / group_name
+            group_folder = validated_folder / group_name
             group_folder.mkdir(exist_ok=True)
             folders_created.append(group_folder)
 
@@ -123,16 +212,19 @@ async def execute_organize(
             metadata={"strategy": strategy},
         )
 
-        # Audit log
+        # Week 2: Enhanced audit log
         audit = AuditLogger()
         await audit.log_operation(
             operation_type="organize_folder",
             status="success",
-            details={"path": str(folder), "strategy": strategy, "moved": moved},
+            details={"path": str(validated_folder), "strategy": strategy, "moved": moved},
             snapshot_id=snapshot.snapshot_id,
+            user_id=user_id,
+            risk_level="medium",
+            paths=[str(validated_folder)]
         )
 
-        logger.info("folder_organized", path=str(folder), moved=moved)
+        logger.info("folder_organized", extra={"path": str(validated_folder), "moved": moved})
 
         return ToolResult(
             success=True,
@@ -142,8 +234,19 @@ async def execute_organize(
         ).to_dict()
 
     except Exception as e:
-        logger.error("organize_execution_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="execute_organize",
+            status="failed",
+            details={"path": str(path), "strategy": strategy},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("organize_execution_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
+
 
 @function_tool()
 async def organize_by_size_tool(
@@ -151,11 +254,34 @@ async def organize_by_size_tool(
     path: str,
 ) -> dict:
     """Organize files into Small / Medium / Large folders"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         folder = expand_user_path(path)
-        validate_path(folder, must_exist=True)
 
-        files = scan_folder(folder, recursive=False)
+        # Week 2: Security validation
+        try:
+            validated_folder = path_validator.validate_path(
+                folder,
+                operation="modify",
+                must_exist=True
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="organize_by_size",
+                status="blocked",
+                details={"path": str(folder)},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(folder)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+
+        validate_path(validated_folder, must_exist=True)
+
+        files = scan_folder(validated_folder, recursive=False)
 
         groups = {
             "Small": [],
@@ -171,19 +297,40 @@ async def organize_by_size_tool(
             else:
                 groups["Large"].append(f)
 
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="organize_by_size",
+            status="pending",
+            details={"path": str(validated_folder), "file_count": len(files)},
+            user_id=user_id,
+            risk_level="medium",
+            paths=[str(validated_folder)]
+        )
+
         return ToolResult(
             success=True,
             requires_confirmation=True,
             confirmation_message=f"Organize {len(files)} files by size?",
             data={
-                "path": str(folder),
+                "path": str(validated_folder),
                 "groups": {k: len(v) for k, v in groups.items()},
                 "strategy": "by_size",
             },
         ).to_dict()
 
     except Exception as e:
-        logger.error("organize_by_size_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="organize_by_size",
+            status="failed",
+            details={"path": str(path)},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("organize_by_size_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
@@ -193,30 +340,74 @@ async def organize_by_extension_tool(
     path: str,
 ) -> dict:
     """Organize files by file extension"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         folder = expand_user_path(path)
-        validate_path(folder, must_exist=True)
 
-        files = scan_folder(folder, recursive=False)
+        # Week 2: Security validation
+        try:
+            validated_folder = path_validator.validate_path(
+                folder,
+                operation="modify",
+                must_exist=True
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="organize_by_extension",
+                status="blocked",
+                details={"path": str(folder)},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(folder)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+
+        validate_path(validated_folder, must_exist=True)
+
+        files = scan_folder(validated_folder, recursive=False)
         groups = {}
 
         for f in files:
             ext = f.path.suffix.lower().lstrip(".") or "no_extension"
             groups.setdefault(ext, []).append(f)
 
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="organize_by_extension",
+            status="pending",
+            details={"path": str(validated_folder), "file_count": len(files)},
+            user_id=user_id,
+            risk_level="medium",
+            paths=[str(validated_folder)]
+        )
+
         return ToolResult(
             success=True,
             requires_confirmation=True,
             confirmation_message=f"Organize {len(files)} files by extension?",
             data={
-                "path": str(folder),
+                "path": str(validated_folder),
                 "strategy": "by_extension",
                 "groups": {k: len(v) for k, v in groups.items()},
             },
         ).to_dict()
 
     except Exception as e:
-        logger.error("organize_by_extension_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="organize_by_extension",
+            status="failed",
+            details={"path": str(path)},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("organize_by_extension_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
@@ -226,11 +417,34 @@ async def normalize_filenames_tool(
     path: str,
 ) -> dict:
     """Normalize filenames (lowercase, underscores, safe chars)"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         folder = expand_user_path(path)
-        validate_path(folder, must_exist=True)
 
-        files = scan_folder(folder, recursive=False)
+        # Week 2: Security validation
+        try:
+            validated_folder = path_validator.validate_path(
+                folder,
+                operation="modify",
+                must_exist=True
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="normalize_filenames",
+                status="blocked",
+                details={"path": str(folder)},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(folder)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+
+        validate_path(validated_folder, must_exist=True)
+
+        files = scan_folder(validated_folder, recursive=False)
 
         preview = {}
         for f in files:
@@ -242,19 +456,40 @@ async def normalize_filenames_tool(
             if new_name != f.path.name:
                 preview[f.path.name] = new_name
 
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="normalize_filenames",
+            status="pending",
+            details={"path": str(validated_folder), "changes": len(preview)},
+            user_id=user_id,
+            risk_level="low",
+            paths=[str(validated_folder)]
+        )
+
         return ToolResult(
             success=True,
             requires_confirmation=True,
             confirmation_message=f"Normalize {len(preview)} filenames?",
             data={
-                "path": str(folder),
+                "path": str(validated_folder),
                 "changes": preview,
                 "strategy": "normalize_names",
             },
         ).to_dict()
 
     except Exception as e:
-        logger.error("normalize_preview_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="normalize_filenames",
+            status="failed",
+            details={"path": str(path)},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("normalize_preview_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
@@ -264,26 +499,70 @@ async def flatten_folder_tool(
     path: str,
 ) -> dict:
     """Flatten nested folder structure into one level"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         folder = expand_user_path(path)
-        validate_path(folder, must_exist=True)
 
-        files = scan_folder(folder, recursive=True)
-        preview = [str(f.path) for f in files if f.path.parent != folder]
+        # Week 2: Security validation
+        try:
+            validated_folder = path_validator.validate_path(
+                folder,
+                operation="modify",
+                must_exist=True
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="flatten_folder",
+                status="blocked",
+                details={"path": str(folder)},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(folder)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+
+        validate_path(validated_folder, must_exist=True)
+
+        files = scan_folder(validated_folder, recursive=True)
+        preview = [str(f.path) for f in files if f.path.parent != validated_folder]
+
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="flatten_folder",
+            status="pending",
+            details={"path": str(validated_folder), "file_count": len(preview)},
+            user_id=user_id,
+            risk_level="high",
+            paths=[str(validated_folder)]
+        )
 
         return ToolResult(
             success=True,
             requires_confirmation=True,
             confirmation_message=f"Flatten folder by moving {len(preview)} files?",
             data={
-                "path": str(folder),
+                "path": str(validated_folder),
                 "file_count": len(preview),
                 "strategy": "flatten",
             },
         ).to_dict()
 
     except Exception as e:
-        logger.error("flatten_preview_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="flatten_folder",
+            status="failed",
+            details={"path": str(path)},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("flatten_preview_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
@@ -293,26 +572,70 @@ async def clean_empty_folders_tool(
     path: str,
 ) -> dict:
     """Remove empty folders"""
+    user_id = getattr(context, 'user_id', 'default_user')
+    
     try:
         folder = expand_user_path(path)
-        validate_path(folder, must_exist=True)
+
+        # Week 2: Security validation
+        try:
+            validated_folder = path_validator.validate_path(
+                folder,
+                operation="delete",
+                must_exist=True
+            )
+        except (PathSecurityError, ValidationError) as e:
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="clean_empty_folders",
+                status="blocked",
+                details={"path": str(folder)},
+                user_id=user_id,
+                risk_level="blocked",
+                paths=[str(folder)],
+                error=str(e)
+            )
+            return ToolResult(success=False, error=f"Security: {str(e)}").to_dict()
+
+        validate_path(validated_folder, must_exist=True)
 
         empty_folders = [
-            str(p) for p in folder.rglob("*")
+            str(p) for p in validated_folder.rglob("*")
             if p.is_dir() and not any(p.iterdir())
         ]
+
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="clean_empty_folders",
+            status="pending",
+            details={"path": str(validated_folder), "empty_count": len(empty_folders)},
+            user_id=user_id,
+            risk_level="low",
+            paths=[str(validated_folder)]
+        )
 
         return ToolResult(
             success=True,
             requires_confirmation=True,
             confirmation_message=f"Remove {len(empty_folders)} empty folders?",
             data={
-                "path": str(folder),
+                "path": str(validated_folder),
                 "empty_folders": empty_folders,
                 "strategy": "clean_empty",
             },
         ).to_dict()
 
     except Exception as e:
-        logger.error("clean_empty_preview_failed", error=str(e))
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="clean_empty_folders",
+            status="failed",
+            details={"path": str(path)},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[str(path)],
+            error=str(e)
+        )
+        logger.error("clean_empty_preview_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
