@@ -13,7 +13,7 @@ from models.tool_results import ToolResult
 
 # Week 2 Security Imports
 from core.security import path_validator, security_enforcer
-from core.risk_assessment import risk_assessor
+from core.risk_assesment import risk_assessor
 from core.confirmation import ConfirmationManager
 from core.backup_manager import backup_manager
 from core.exceptions import PathSecurityError, ValidationError
