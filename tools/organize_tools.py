@@ -8,7 +8,7 @@ from utils.path_utils import expand_user_path, validate_path, get_safe_destinati
 from utils.file_utils import scan_folder, group_by_category
 from config.greetings import get_confirmation_message, get_success_message
 from core.snapshot import SnapshotManager
-from core.audit import AuditLogger
+from core.audit_logger import AuditLogger
 from models.tool_results import ToolResult
 
 # Week 2 Security Imports
