@@ -47,7 +47,7 @@ LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
 DEEPGRAM_API_KEY=your_deepgram_api_key
 MEM0_API_KEY=your_memo_api_key
-OPENAI_MODEL=your_openai_model Default(gpt-40-mini)
+OPENAI_MODEL=your_openai_model Default(gpt-4o-mini)
 DEEPGRAM_STT=your_deepgram_stt_model Default(nova-2)
 DEEPGRAM_TTS=your_deepgram_tts_model Default(aura-asteria-en)
 ```
