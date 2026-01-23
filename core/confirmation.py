@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import asyncio
 
-from core.risk_assessment import risk_assessor, RiskLevel, RiskAssessment
+from core.risk_assesment import risk_assessor, RiskLevel, RiskAssessment
 from core.audit_logger import audit_logger
 from core.backup_manager import backup_manager
 from config.security_config import security_config
