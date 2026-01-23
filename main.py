@@ -20,7 +20,7 @@ from core.memory_manager import MemoryManager
 from config.prompts import SYSTEM_PROMPT
 from config.greetings import get_greeting
 from utils.logger import get_logger
-from config.settings import Settings
+from config.settings import settings
 
 # Tools
 from tools.read_tools import (
@@ -135,9 +135,9 @@ class FileBuddy(Agent):
         super().__init__(
             instructions=SYSTEM_PROMPT,
             tools=tools,
-            stt=deepgram.STT(model=Settings.DEEPGRAM_STT),
-            llm=openai.LLM(model=Settings.OPENAI_MODEL),
-            tts=deepgram.TTS(model=Settings.DEEPGRAM_TTS),
+            stt=deepgram.STT(model=settings.DEEPGRAM_STT),
+            llm=openai.LLM(model=settings.OPENAI_MODEL),
+            tts=deepgram.TTS(model=settings.DEEPGRAM_TTS),
             vad=silero.VAD.load(),
             chat_ctx=chat_ctx,
         )
