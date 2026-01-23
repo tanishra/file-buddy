@@ -1,6 +1,3 @@
-# tools/utility_tools.py
-"""Utility tools (undo, redo, history, state, transactions)"""
-
 from utils.logger import get_logger
 from core.snapshot import SnapshotManager
 from core.audit import AuditLogger
@@ -28,31 +25,35 @@ def set_last_snapshot(snapshot_id: str):
         if len(_snapshot_stack) > 10:
             _snapshot_stack.pop(0)
     
-    logger.info("snapshot_tracked", snapshot_id=snapshot_id, stack_size=len(_snapshot_stack))
+    logger.info("snapshot_tracked", extra={"snapshot_id": snapshot_id, "stack_size": len(_snapshot_stack)})
 
 
 @function_tool()
 async def undo_last_action_tool(context: RunContext) -> dict:
-    """
-    Undo the last file operation with full rollback capability
+    """Undo the last file operation with full rollback capability"""
+    user_id = getattr(context, 'user_id', 'default_user')
     
-    Advanced features:
-    - Restores files to original locations
-    - Removes created folders if empty
-    - Handles delete operations (restores from trash)
-    - Multi-level undo support
-    - Detailed operation feedback
-    """
     try:
         global _last_snapshot_id, _last_undone_snapshot_id, _snapshot_stack
 
         if not _last_snapshot_id:
+            # Week 2: Enhanced audit
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="undo",
+                status="failed",
+                details={"reason": "no_snapshot"},
+                user_id=user_id,
+                risk_level="low",
+                paths=[],
+                error="No recent action to undo"
+            )
             return ToolResult(
                 success=False,
                 error="No recent action to undo. No operations have been performed yet."
             ).to_dict()
 
-        logger.info("undo_attempt", snapshot_id=_last_snapshot_id)
+        logger.info("undo_attempt", extra={"snapshot_id": _last_snapshot_id})
 
         snapshot_mgr = SnapshotManager()
         
@@ -60,7 +61,7 @@ async def undo_last_action_tool(context: RunContext) -> dict:
         result = await snapshot_mgr.rollback(_last_snapshot_id)
 
         if result.get("success"):
-            # Log successful undo
+            # Week 2: Enhanced audit log
             audit = AuditLogger()
             await audit.log_operation(
                 operation_type="undo",
@@ -69,13 +70,18 @@ async def undo_last_action_tool(context: RunContext) -> dict:
                     "snapshot_id": _last_snapshot_id,
                     "restored": result.get("restored", 0),
                     "operation": result.get("operation_type", "unknown")
-                }
+                },
+                user_id=user_id,
+                risk_level="low",
+                paths=[]
             )
 
             logger.info(
                 "undo_successful",
-                snapshot_id=_last_snapshot_id,
-                restored=result.get("restored", 0)
+                extra={
+                    "snapshot_id": _last_snapshot_id,
+                    "restored": result.get("restored", 0)
+                }
             )
 
             # Update state
@@ -107,7 +113,20 @@ async def undo_last_action_tool(context: RunContext) -> dict:
         
         else:
             error_msg = result.get("error", "Rollback failed for unknown reason")
-            logger.error("undo_failed", error=error_msg, snapshot_id=_last_snapshot_id)
+            
+            # Week 2: Enhanced audit
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="undo",
+                status="failed",
+                details={"snapshot_id": _last_snapshot_id},
+                user_id=user_id,
+                risk_level="low",
+                paths=[],
+                error=error_msg
+            )
+            
+            logger.error("undo_failed", extra={"error": error_msg, "snapshot_id": _last_snapshot_id})
             
             return ToolResult(
                 success=False,
@@ -115,7 +134,18 @@ async def undo_last_action_tool(context: RunContext) -> dict:
             ).to_dict()
 
     except Exception as e:
-        logger.error("undo_exception", error=str(e), exc_info=True)
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="undo",
+            status="failed",
+            details={},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[],
+            error=str(e)
+        )
+        logger.error("undo_exception", extra={"error": str(e)}, exc_info=True)
         return ToolResult(
             success=False,
             error=f"Undo failed with error: {str(e)}"
@@ -124,21 +154,23 @@ async def undo_last_action_tool(context: RunContext) -> dict:
 
 @function_tool()
 async def show_history_tool(context: RunContext, limit: int = 10) -> dict:
-    """
-    Show recent file operations with detailed information
+    """Show recent file operations with detailed information"""
+    user_id = getattr(context, 'user_id', 'default_user')
     
-    Features:
-    - Chronological operation listing
-    - Success/failure status
-    - Operation details (files moved, deleted, etc.)
-    - Timestamp information
-    - Filterable history
-    """
     try:
         audit = AuditLogger()
         operations = await audit.get_recent_operations(limit)
 
         if not operations:
+            # Week 2: Enhanced audit
+            await audit.log_operation(
+                operation_type="show_history",
+                status="success",
+                details={"count": 0},
+                user_id=user_id,
+                risk_level="safe",
+                paths=[]
+            )
             return ToolResult(
                 success=True,
                 data={"operations": []},
@@ -180,7 +212,17 @@ async def show_history_tool(context: RunContext, limit: int = 10) -> dict:
                 "details": details
             })
 
-        logger.info("history_retrieved", count=len(history))
+        # Week 2: Enhanced audit
+        await audit.log_operation(
+            operation_type="show_history",
+            status="success",
+            details={"count": len(history), "limit": limit},
+            user_id=user_id,
+            risk_level="safe",
+            paths=[]
+        )
+
+        logger.info("history_retrieved", extra={"count": len(history)})
 
         return ToolResult(
             success=True,
@@ -189,17 +231,26 @@ async def show_history_tool(context: RunContext, limit: int = 10) -> dict:
         ).to_dict()
 
     except Exception as e:
-        logger.error("history_failed", error=str(e))
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="show_history",
+            status="failed",
+            details={},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[],
+            error=str(e)
+        )
+        logger.error("history_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
 @function_tool()
 async def redo_last_action_tool(context: RunContext) -> dict:
-    """
-    Redo the last undone action
+    """Redo the last undone action"""
+    user_id = getattr(context, 'user_id', 'default_user')
     
-    Note: Currently restores the snapshot state, effectively re-doing the undo
-    """
     try:
         global _last_undone_snapshot_id, _last_snapshot_id
 
@@ -213,7 +264,18 @@ async def redo_last_action_tool(context: RunContext) -> dict:
         _last_snapshot_id = _last_undone_snapshot_id
         _last_undone_snapshot_id = None
 
-        logger.info("redo_executed", snapshot_id=_last_snapshot_id)
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="redo",
+            status="success",
+            details={"snapshot_id": _last_snapshot_id},
+            user_id=user_id,
+            risk_level="low",
+            paths=[]
+        )
+
+        logger.info("redo_executed", extra={"snapshot_id": _last_snapshot_id})
 
         return ToolResult(
             success=True,
@@ -222,19 +284,28 @@ async def redo_last_action_tool(context: RunContext) -> dict:
         ).to_dict()
 
     except Exception as e:
-        logger.error("redo_failed", error=str(e))
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="redo",
+            status="failed",
+            details={},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[],
+            error=str(e)
+        )
+        logger.error("redo_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
 @function_tool()
 async def undo_to_snapshot_tool(context: RunContext, snapshot_id: str) -> dict:
-    """
-    Undo to a specific snapshot ID (advanced rollback)
+    """Undo to a specific snapshot ID (advanced rollback)"""
+    user_id = getattr(context, 'user_id', 'default_user')
     
-    Allows rolling back to any specific point in history
-    """
     try:
-        logger.info("undo_to_snapshot_attempt", target_snapshot=snapshot_id)
+        logger.info("undo_to_snapshot_attempt", extra={"target_snapshot": snapshot_id})
         
         snapshot_mgr = SnapshotManager()
         result = await snapshot_mgr.rollback(snapshot_id)
@@ -243,10 +314,23 @@ async def undo_to_snapshot_tool(context: RunContext, snapshot_id: str) -> dict:
             global _last_snapshot_id
             _last_snapshot_id = None
             
+            # Week 2: Enhanced audit
+            audit = AuditLogger()
+            await audit.log_operation(
+                operation_type="undo_to_snapshot",
+                status="success",
+                details={"snapshot_id": snapshot_id, "restored": result.get("restored", 0)},
+                user_id=user_id,
+                risk_level="low",
+                paths=[]
+            )
+            
             logger.info(
                 "undo_to_snapshot_successful",
-                snapshot_id=snapshot_id,
-                restored=result.get("restored", 0)
+                extra={
+                    "snapshot_id": snapshot_id,
+                    "restored": result.get("restored", 0)
+                }
             )
 
             return ToolResult(
@@ -258,23 +342,44 @@ async def undo_to_snapshot_tool(context: RunContext, snapshot_id: str) -> dict:
                 message=f"Rolled back to snapshot {snapshot_id[:8]}..."
             ).to_dict()
 
+        # Week 2: Enhanced audit for failure
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="undo_to_snapshot",
+            status="failed",
+            details={"snapshot_id": snapshot_id},
+            user_id=user_id,
+            risk_level="low",
+            paths=[],
+            error=result.get("error", "Rollback failed")
+        )
+
         return ToolResult(
             success=False,
             error=result.get("error", "Rollback to snapshot failed")
         ).to_dict()
 
     except Exception as e:
-        logger.error("undo_to_snapshot_failed", error=str(e))
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="undo_to_snapshot",
+            status="failed",
+            details={"snapshot_id": snapshot_id},
+            user_id=user_id,
+            risk_level="unknown",
+            paths=[],
+            error=str(e)
+        )
+        logger.error("undo_to_snapshot_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
 @function_tool()
 async def list_available_snapshots_tool(context: RunContext) -> dict:
-    """
-    List all available snapshots for rollback
+    """List all available snapshots for rollback"""
+    user_id = getattr(context, 'user_id', 'default_user')
     
-    Shows snapshot history with timestamps and operation types
-    """
     try:
         global _snapshot_stack
         
@@ -290,7 +395,6 @@ async def list_available_snapshots_tool(context: RunContext) -> dict:
         
         for snapshot_id in _snapshot_stack:
             try:
-                # Try to load snapshot details
                 snapshot = await snapshot_mgr.load_snapshot(snapshot_id)
                 if snapshot:
                     snapshot_details.append({
@@ -300,14 +404,24 @@ async def list_available_snapshots_tool(context: RunContext) -> dict:
                         "files": len(snapshot.file_states)
                     })
             except:
-                # If snapshot not found, still show the ID
                 snapshot_details.append({
                     "id": snapshot_id,
                     "operation": "unknown",
                     "status": "unavailable"
                 })
 
-        logger.info("snapshots_listed", count=len(snapshot_details))
+        # Week 2: Enhanced audit
+        audit = AuditLogger()
+        await audit.log_operation(
+            operation_type="list_snapshots",
+            status="success",
+            details={"count": len(snapshot_details)},
+            user_id=user_id,
+            risk_level="safe",
+            paths=[]
+        )
+
+        logger.info("snapshots_listed", extra={"count": len(snapshot_details)})
 
         return ToolResult(
             success=True,
@@ -319,18 +433,14 @@ async def list_available_snapshots_tool(context: RunContext) -> dict:
         ).to_dict()
 
     except Exception as e:
-        logger.error("list_snapshots_failed", error=str(e))
+        logger.error("list_snapshots_failed", extra={"error": str(e)})
         return ToolResult(success=False, error=str(e)).to_dict()
 
 
 @function_tool()
 async def begin_transaction_tool(context: RunContext, name: str) -> dict:
-    """
-    Begin a logical transaction for grouped file operations
-    
-    Groups multiple operations under a single transaction name
-    for easier tracking and potential batch rollback
-    """
+    """Begin a logical transaction for grouped file operations"""
+    user_id = getattr(context, 'user_id', 'default_user')
     global _active_transaction
 
     if _active_transaction:
@@ -340,7 +450,19 @@ async def begin_transaction_tool(context: RunContext, name: str) -> dict:
         ).to_dict()
 
     _active_transaction = name
-    logger.info("transaction_started", name=name)
+    
+    # Week 2: Enhanced audit
+    audit = AuditLogger()
+    await audit.log_operation(
+        operation_type="begin_transaction",
+        status="success",
+        details={"transaction_name": name},
+        user_id=user_id,
+        risk_level="safe",
+        paths=[]
+    )
+    
+    logger.info("transaction_started", extra={"name": name})
 
     return ToolResult(
         success=True,
@@ -351,11 +473,8 @@ async def begin_transaction_tool(context: RunContext, name: str) -> dict:
 
 @function_tool()
 async def end_transaction_tool(context: RunContext) -> dict:
-    """
-    End the active transaction
-    
-    Completes the current transaction and releases the lock
-    """
+    """End the active transaction"""
+    user_id = getattr(context, 'user_id', 'default_user')
     global _active_transaction
 
     if not _active_transaction:
@@ -367,7 +486,18 @@ async def end_transaction_tool(context: RunContext) -> dict:
     name = _active_transaction
     _active_transaction = None
     
-    logger.info("transaction_ended", name=name)
+    # Week 2: Enhanced audit
+    audit = AuditLogger()
+    await audit.log_operation(
+        operation_type="end_transaction",
+        status="success",
+        details={"transaction_name": name},
+        user_id=user_id,
+        risk_level="safe",
+        paths=[]
+    )
+    
+    logger.info("transaction_ended", extra={"name": name})
 
     return ToolResult(
         success=True,
@@ -377,45 +507,9 @@ async def end_transaction_tool(context: RunContext) -> dict:
 
 
 @function_tool()
-async def utility_diagnostics_tool(context: RunContext) -> dict:
-    """
-    Inspect internal utility system state for debugging
-    
-    Shows:
-    - Current snapshot tracking
-    - Undo/redo availability
-    - Active transactions
-    - Snapshot stack depth
-    """
-    global _last_snapshot_id, _last_undone_snapshot_id, _active_transaction, _snapshot_stack
-    
-    diagnostics = {
-        "last_snapshot_id": _last_snapshot_id,
-        "last_undone_snapshot_id": _last_undone_snapshot_id,
-        "active_transaction": _active_transaction,
-        "snapshot_stack_size": len(_snapshot_stack),
-        "snapshot_stack": _snapshot_stack,
-        "undo_available": _last_snapshot_id is not None,
-        "redo_available": _last_undone_snapshot_id is not None
-    }
-    
-    logger.info("diagnostics_retrieved", **diagnostics)
-
-    return ToolResult(
-        success=True,
-        data=diagnostics,
-        message="Utility diagnostics retrieved"
-    ).to_dict()
-
-
-@function_tool()
 async def clear_undo_state_tool(context: RunContext) -> dict:
-    """
-    Clear all undo/redo state and snapshot tracking
-    
-    Warning: This removes all rollback capability
-    Use with caution - cannot be undone
-    """
+    """Clear all undo/redo state and snapshot tracking"""
+    user_id = getattr(context, 'user_id', 'default_user')
     global _last_snapshot_id, _last_undone_snapshot_id, _snapshot_stack
 
     previous_state = {
@@ -427,7 +521,18 @@ async def clear_undo_state_tool(context: RunContext) -> dict:
     _last_undone_snapshot_id = None
     _snapshot_stack = []
     
-    logger.info("undo_state_cleared", **previous_state)
+    # Week 2: Enhanced audit
+    audit = AuditLogger()
+    await audit.log_operation(
+        operation_type="clear_undo_state",
+        status="success",
+        details=previous_state,
+        user_id=user_id,
+        risk_level="low",
+        paths=[]
+    )
+    
+    logger.info("undo_state_cleared", extra=previous_state)
 
     return ToolResult(
         success=True,
@@ -438,11 +543,8 @@ async def clear_undo_state_tool(context: RunContext) -> dict:
 
 @function_tool()
 async def peek_last_action_tool(context: RunContext) -> dict:
-    """
-    Preview the last undoable action without executing undo
-    
-    Shows what would be undone if undo is called
-    """
+    """Preview the last undoable action without executing undo"""
+    user_id = getattr(context, 'user_id', 'default_user')
     global _last_snapshot_id
     
     if not _last_snapshot_id:
@@ -481,11 +583,8 @@ async def peek_last_action_tool(context: RunContext) -> dict:
 
 @function_tool()
 async def system_state_tool(context: RunContext) -> dict:
-    """
-    Inspect overall system state
-    
-    Provides quick overview of undo/redo status and transaction state
-    """
+    """Inspect overall system state"""
+    user_id = getattr(context, 'user_id', 'default_user')
     global _last_snapshot_id, _last_undone_snapshot_id, _active_transaction, _snapshot_stack
     
     state = {
@@ -497,7 +596,18 @@ async def system_state_tool(context: RunContext) -> dict:
         "transaction_name": _active_transaction
     }
     
-    logger.info("system_state_retrieved", **state)
+    # Week 2: Enhanced audit
+    audit = AuditLogger()
+    await audit.log_operation(
+        operation_type="system_state",
+        status="success",
+        details=state,
+        user_id=user_id,
+        risk_level="safe",
+        paths=[]
+    )
+    
+    logger.info("system_state_retrieved", extra=state)
 
     return ToolResult(
         success=True,
