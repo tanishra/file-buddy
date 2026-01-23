@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 from uuid import uuid4
 from utils.logger import get_logger
-from config.settings import SNAPSHOTS_DIR, SNAPSHOT_RETENTION_HOURS
+from config.settings import settings
 
 logger = get_logger(__name__)
 
@@ -25,14 +25,14 @@ class Snapshot:
         """Check if snapshot expired"""
         created = datetime.fromisoformat(self.created_at)
         age_hours = (datetime.utcnow() - created).total_seconds() / 3600
-        return age_hours > SNAPSHOT_RETENTION_HOURS
+        return age_hours > settings.SNAPSHOT_RETENTION_HOURS
 
 class SnapshotManager:
     """Manages snapshots for rollback"""
     
     def __init__(self):
         self.logger = logger.bind(component="SnapshotManager")
-        self.snapshots_dir = SNAPSHOTS_DIR
+        self.snapshots_dir = settings.SNAPSHOTS_DIR
     
     async def create_snapshot(
         self,
