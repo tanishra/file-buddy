@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from uuid import uuid4
 from utils.logger import get_logger
-from config.settings import AUDIT_LOGS_DIR
+from config.settings import settings
 
 logger = get_logger(__name__)
 
@@ -13,7 +13,7 @@ class AuditLogger:
     
     def __init__(self):
         self.logger = logger.bind(component="AuditLogger")
-        self.audit_dir = AUDIT_LOGS_DIR
+        self.audit_dir = settings.AUDIT_LOGS_DIR
         
         # Create daily log file
         today = datetime.utcnow().strftime("%Y-%m-%d")

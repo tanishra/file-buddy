@@ -14,8 +14,8 @@ logger = get_logger(__name__)
 
 # Try to get AUDIT_LOGS_DIR from settings, fallback to security_config
 try:
-    from config.settings import AUDIT_LOGS_DIR
-    AUDIT_DIR = AUDIT_LOGS_DIR
+    from config.settings import settings
+    AUDIT_DIR = settings.AUDIT_LOGS_DIR
 except (ImportError, AttributeError):
     AUDIT_DIR = security_config.get_audit_directory()
 
