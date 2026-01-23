@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import List, Dict
 from dataclasses import dataclass
 from datetime import datetime
-from config.settings import FILE_TYPE_CATEGORIES
+from config.settings import settings
 from config.policies import is_sensitive_file
 
 @dataclass
@@ -44,7 +44,7 @@ def categorize_file(file_path: Path) -> str:
     name = file_path.stem.lower()
     
     # Primary: Extension-based categorization
-    for category, extensions in FILE_TYPE_CATEGORIES.items():
+    for category, extensions in settings.FILE_TYPE_CATEGORIES.items():
         if ext in extensions:
             return category
     
