@@ -1,0 +1,105 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist",
+    "withGlobalTauri": false
+  },
+  "package": {
+    "productName": "FileBuddy",
+    "version": "0.3.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      },
+      "dialog": {
+        "all": true,
+        "ask": true,
+        "confirm": true,
+        "message": true,
+        "open": true,
+        "save": true
+      },
+      "fs": {
+        "all": true,
+        "readFile": true,
+        "writeFile": true,
+        "readDir": true,
+        "copyFile": true,
+        "createDir": true,
+        "removeDir": true,
+        "removeFile": true,
+        "renameFile": true,
+        "exists": true,
+        "scope": ["$HOME/**", "$DESKTOP/**", "$DOWNLOAD/**", "$DOCUMENT/**"]
+      },
+      "path": {
+        "all": true
+      },
+      "process": {
+        "all": false,
+        "relaunch": true,
+        "exit": true
+      },
+      "protocol": {
+        "all": true,
+        "asset": true,
+        "assetScope": ["$RESOURCE/**"]
+      }
+    },
+    "bundle": {
+      "active": true,
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "identifier": "com.filebuddy.app",
+      "targets": "all",
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: https://asset.localhost"
+    },
+    "systemTray": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://releases.filebuddy.app/{{target}}/{{current_version}}"
+      ],
+      "dialog": true,
+      "pubkey": "YOUR_UPDATER_PUBKEY_HERE"
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "FileBuddy",
+        "width": 800,
+        "height": 600,
+        "minWidth": 600,
+        "minHeight": 400,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "skipTaskbar": false,
+        "visible": true
+      }
+    ]
+  }
+}

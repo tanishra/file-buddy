@@ -1,0 +1,39 @@
+[package]
+name = "filebuddy"
+version = "0.3.0"
+description = "Voice-controlled file management assistant"
+authors = ["Your Name"]
+license = "MIT"
+repository = "https://github.com/yourusername/filebuddy"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.5", features = ["system-tray", "shell-open", "dialog-all", "fs-all", "path-all", "process-all", "protocol-all"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+anyhow = "1.0"
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.11"
+directories = "5.0"
+chrono = { version = "0.4", features = ["serde"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"] }
+notify = "6.1"
+global-hotkey = "0.5"
+tray-icon = "0.14"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "z"
+strip = true
