@@ -3,7 +3,7 @@ from typing import List
 from utils.logger import get_logger
 from utils.path_utils import validate_path
 from config.policies import is_executable_file, is_sensitive_file
-from config.settings import MAX_FILES_PER_OPERATION, MAX_FILE_SIZE_MB
+from config.settings import settings
 
 logger = get_logger(__name__)
 
@@ -41,10 +41,10 @@ class SafetyChecker:
         )
         
         # Check path count
-        if len(paths) > MAX_FILES_PER_OPERATION:
+        if len(paths) > settings.MAX_FILES_PER_OPERATION:
             raise SafetyViolation(
                 f"Operation exceeds maximum file limit "
-                f"({MAX_FILES_PER_OPERATION})"
+                f"({settings.MAX_FILES_PER_OPERATION})"
             )
         
         # Validate each path
