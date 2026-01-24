@@ -13,6 +13,14 @@ This is a voice-controlled file manager built with **[LiveKit](https://www.livek
 - **Safety First** - Protected paths, confirmation prompts, audit logging
 - **Complete Audit Trail** - Every action logged for compliance
 
+## Memory Management
+
+FileBuddy uses **[Mem0](https://mem0.ai)** for efficient memory management. Mem0 helps to store and manage large amounts of data while keeping the system fast and responsive.
+
+- **Persistent Memory**: Automatically stores frequently accessed data for quick retrieval.
+- **Contextual Memory**: Remembers context over time to provide a more intuitive, continuous user experience.
+- **Automatic Cleanup**: Clears old or unnecessary data to maintain performance.
+
 ## Quick Start
 
 ### Prerequisites
