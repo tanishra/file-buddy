@@ -1,6 +1,6 @@
 # FileBuddy
 
-Voice-controlled AI file manager powered by OpenAI Realtime API. Organize, search, create, and manage files safely through natural conversation.
+This is a voice-controlled file manager built with **[LiveKit](https://www.livekit.io)**. You can organize, search, create, and manage files through natural conversation.
 
 ## Features
 
