@@ -92,11 +92,11 @@ FileBuddy: "Deleted 23 files (moved to trash)"
 
 ## Safety Features
 
-- **Protected Paths** - System folders are off-limits
-- **User Confirmation** - Required for destructive operations
-- **Rollback System** - 24-hour undo window for all operations
-- **Audit Logging** - Complete operation history
-- **Trash Safety** - Files deleted to trash, not permanent
+- **Protected Paths** - System folders are off-limits.
+- **User Confirmation** - Required for destructive operations.
+- **Rollback System** - 24-hour undo window for all operations.
+- **Audit Logging** - Complete operation history.
+- **Trash Safety** - Files deleted to trash, not permanent.
 
 ## Project Structure
 
